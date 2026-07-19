@@ -1,0 +1,50 @@
+# Base training config — shared across all runs.
+# Per-run configs (64k/ and 128k/) override individual fields by setting them again.
+# Paths (${model_dir}, ${data_dir}, ${output_dir}) are substituted at runtime
+# from configs/paths.yaml — edit that file to set your local paths.
+
+model_id: ${model_dir}/Qwen/Qwen3-4B-Instruct-2507
+
+lora:
+  rank: 16
+  alpha: 16
+  target_modules: all-linear
+  dropout: 0
+  bias: none
+
+training:
+  learning_rate: 5.0e-4
+  max_epochs: 5
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.15
+  truncation_strategy: left
+  split_dataset_ratio: 0.1
+  optim: adamw_torch
+
+hardware:
+  torch_dtype: bfloat16
+  attn_impl: flash_attn
+  deepspeed: zero3_offload
+  gradient_checkpointing: true
+  sequence_parallel_size: 4
+  use_liger_kernel: true
+  padding_free: true
+  max_model_len: 131072
+
+checkpointing:
+  eval_on_start: true
+  eval_steps: 10
+  save_steps: 10
+  create_checkpoint_symlink: true
+
+logging:
+  logging_steps: 1
+  report_to: tensorboard
+
+extra_args:
+  load_from_cache_file: true
+  use_logits_to_keep: false
+  dataloader_num_workers: 4
+  dataset_num_proc: 1

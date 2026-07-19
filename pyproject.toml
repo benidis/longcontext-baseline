@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "longcontext-baseline"
+version = "0.1.0"
+description = "Long-context LoRA fine-tuning baseline using ms-swift"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Training (needs GPU + CUDA-compatible torch installed separately)
+# Install ms-swift manually:
+#   pip install ms-swift -U
+#   pip install 'ms-swift[megatron]' -U
+# flash-attn must also be installed manually:
+#   pip install flash-attn --no-build-isolation
+train = [
+    "deepspeed<0.19",
+    "liger-kernel",
+    "tensorboard",
+]
+inference = [
+    "vllm==0.23.0",
+]
+data = [
+    "python-dotenv",
+    "litgpt",
+    "huggingface-hub>=1.5.0",
+    "datasets>=2.0,<3.0",
+]
+dev = [
+    "pytest>=8.0",
+    "black>=24.0",
+    "isort>=5.13",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = []
+
+[tool.uv.sources]
+keys-vals = { path = "/home/ubuntu/Repos/keys_values", editable = true }
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100

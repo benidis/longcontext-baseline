@@ -1,0 +1,12 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/nq_jsonkv_128k
+run_name: nq_jsonkv_128k
+
+training:
+  max_length: 131072
+
+data:
+  datasets:
+    - ${data_dir}/json_kv_128k/development.jsonl
+    - ${data_dir}/nq_128k/development.jsonl

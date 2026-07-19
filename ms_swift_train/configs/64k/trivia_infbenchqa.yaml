@@ -1,0 +1,12 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/trivia_infbenchqa_64k
+run_name: trivia_infbenchqa_64k
+
+training:
+  max_length: 65536
+
+data:
+  datasets:
+    - ${data_dir}/infinite_bench_qa_64k/development.jsonl
+    - ${data_dir}/trivia_qa_64k/development.jsonl

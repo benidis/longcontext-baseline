@@ -1,0 +1,4 @@
+# Machine-local paths — edit this file before running anything.
+# All other paths are derived from base_dir.
+
+base_dir: /opt/dlami/nvme/longcontext

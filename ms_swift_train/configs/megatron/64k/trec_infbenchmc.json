@@ -1,0 +1,30 @@
+{
+  "model_id_or_path": "/opt/dlami/nvme/longcontext/checkpoints/Qwen/Qwen3-4B-Instruct-2507",
+  "lora_rank": 16,
+  "lora_alpha": 16,
+  "lora_dropout": 0.0,
+  "target_modules": "all-linear",
+  "lora_bias": "none",
+  "learning_rate": 0.0005,
+  "num_train_epochs": 5,
+  "micro_batch_size": 1,
+  "global_batch_size": 32,
+  "lr_warmup_fraction": 0.15,
+  "truncation_strategy": "left",
+  "split_dataset_ratio": 0.1,
+  "context_parallel_size": 4,
+  "padding_free": true,
+  "max_model_len": 131072,
+  "eval_steps": 10,
+  "save_steps": 10,
+  "logging_steps": 1,
+  "report_to": [
+    "tensorboard"
+  ],
+  "dataset": [
+    "/opt/dlami/nvme/longcontext/helmet/longtrain_swift/infinite_bench_mc_64k/development.jsonl",
+    "/opt/dlami/nvme/longcontext/helmet/longtrain_swift/trec_coarse_64k/development.jsonl"
+  ],
+  "output_dir": "/opt/dlami/nvme/longcontext/output/trec_infbenchmc_64k_megatron",
+  "max_length": 65536
+}
