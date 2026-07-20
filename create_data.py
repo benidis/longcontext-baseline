@@ -25,14 +25,18 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from paths_config import load_paths
 
-# Force num_proc=1 on Dataset.map — the tokenizer contains RLock objects that
-# cannot be pickled across forked worker processes.
-import datasets as _datasets
-_orig_map = _datasets.Dataset.map
-def _map_single_proc(self, *args, **kwargs):
-    kwargs["num_proc"] = 1
-    return _orig_map(self, *args, **kwargs)
-_datasets.Dataset.map = _map_single_proc
+# Force all Dataset.map/filter operations to run in the main process.
+# Even with num_proc=1, this version of datasets spawns a subprocess via
+# iflatmap_unordered, which tries to pickle the function + closure — and
+# fails when the closure captures RLock objects (e.g. from the tqdm class).
+# Patching iflatmap_unordered to run inline bypasses the pool entirely.
+import datasets.utils.py_utils as _py_utils
+
+def _iflatmap_inline(pool, func, *, kwargs_iterable):
+    for kwargs in kwargs_iterable:
+        yield from func(**kwargs)
+
+_py_utils.iflatmap_unordered = _iflatmap_inline
 
 # Load load_helmet_dev_eval directly from the file to avoid importing
 # keys_values/__init__.py which pulls in kvcache (needs newer torch).
