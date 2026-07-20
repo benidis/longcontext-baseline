@@ -31,12 +31,15 @@ from paths_config import load_paths
 # fails when the closure captures RLock objects (e.g. from the tqdm class).
 # Patching iflatmap_unordered to run inline bypasses the pool entirely.
 import datasets.utils.py_utils as _py_utils
+import datasets.arrow_dataset as _arrow_dataset
 
 def _iflatmap_inline(pool, func, *, kwargs_iterable):
     for kwargs in kwargs_iterable:
         yield from func(**kwargs)
 
+# Patch in both the source module and the already-imported reference in arrow_dataset
 _py_utils.iflatmap_unordered = _iflatmap_inline
+_arrow_dataset.iflatmap_unordered = _iflatmap_inline
 
 # Load load_helmet_dev_eval directly from the file to avoid importing
 # keys_values/__init__.py which pulls in kvcache (needs newer torch).
@@ -47,12 +50,28 @@ _spec.loader.exec_module(_mod)
 load_helmet_dev_eval = _mod.load_helmet_dev_eval
 download_source_data = _mod.download_source_data
 
-# clinc_oos was renamed to clinc/clinc_oos on HuggingFace Hub; patch the module's
-# load_dataset reference so the keys_values code finds it without modification.
+# Patch load_dataset for two compatibility issues:
+#
+# 1. clinc_oos was renamed to clinc/clinc_oos on HuggingFace Hub.
+#
+# 2. datasets >= 3.0 no longer supports loading scripts (trust_remote_code=True).
+#    Any repo that contains a .py loading script raises:
+#      RuntimeError: Dataset scripts are no longer supported, but found trec.py
+#    HuggingFace auto-converts all datasets to parquet at refs/convert/parquet,
+#    so redirecting to that revision bypasses the script entirely.
+_SCRIPT_BASED_DATASETS = {
+    "CogComp/trec",
+    "xingkunliuxtracta/nlu_evaluation_data",
+    "PolyAI/banking77",
+}
+
 _orig_load_dataset = _mod.load_dataset
 def _patched_load_dataset(path, *args, **kwargs):
     if path == "clinc_oos":
         path = "clinc/clinc_oos"
+    kwargs.pop("trust_remote_code", None)
+    if path in _SCRIPT_BASED_DATASETS:
+        kwargs.setdefault("revision", "refs/convert/parquet")
     return _orig_load_dataset(path, *args, **kwargs)
 _mod.load_dataset = _patched_load_dataset
 
