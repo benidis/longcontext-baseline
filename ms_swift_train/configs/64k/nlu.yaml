@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/nlu_64k
+run_name: nlu_64k
+
+training:
+  max_length: 65536
+
+data:
+  datasets:
+    - ${data_dir}/nlu_64k/development.jsonl

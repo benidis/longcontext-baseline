@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/trec_coarse_128k
+run_name: trec_coarse_128k
+
+training:
+  max_length: 131072
+
+data:
+  datasets:
+    - ${data_dir}/trec_coarse_128k/development.jsonl

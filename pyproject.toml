@@ -14,18 +14,11 @@ dependencies = [
 
 [project.optional-dependencies]
 # Training (needs GPU + CUDA-compatible torch installed separately)
-# Install ms-swift manually:
-#   pip install ms-swift -U
-#   pip install 'ms-swift[megatron]' -U
-# flash-attn must also be installed manually:
-#   pip install flash-attn --no-build-isolation
+# Install ms-swift and flash-attn manually after this — see README.
 train = [
     "deepspeed<0.19",
     "liger-kernel",
     "tensorboard",
-]
-inference = [
-    "vllm==0.23.0",
 ]
 data = [
     "python-dotenv",

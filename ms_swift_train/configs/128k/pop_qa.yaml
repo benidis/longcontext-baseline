@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/pop_qa_128k
+run_name: pop_qa_128k
+
+training:
+  max_length: 131072
+
+data:
+  datasets:
+    - ${data_dir}/pop_qa_128k/development.jsonl

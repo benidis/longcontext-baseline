@@ -48,3 +48,12 @@ extra_args:
   use_logits_to_keep: false
   dataloader_num_workers: 4
   dataset_num_proc: 1
+
+# Environment variables set before training starts.
+# CELOSS_PARALLEL_SIZE: chunk CE loss over vocab slices to avoid materialising
+#   the full (tokens × vocab) logit tensor. Without this, peak logit memory at
+#   128k batch=2 is ~19 GB/GPU — causing OOM on 40 GB GPUs.
+# PYTORCH_CUDA_ALLOC_CONF: reduces fragmentation from variable-length sequences.
+env:
+  CELOSS_PARALLEL_SIZE: "2048"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"

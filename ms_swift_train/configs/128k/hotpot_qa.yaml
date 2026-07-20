@@ -1,12 +1,11 @@
 base: ../base.yaml
 
-output_dir: ${output_dir}/hotpot_popqa_128k
-run_name: hotpot_popqa_128k
+output_dir: ${output_dir}/hotpot_qa_128k
+run_name: hotpot_qa_128k
 
 training:
   max_length: 131072
 
 data:
   datasets:
-    - ${data_dir}/pop_qa_128k/development.jsonl
     - ${data_dir}/hotpot_qa_128k/development.jsonl

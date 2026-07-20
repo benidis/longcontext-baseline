@@ -13,7 +13,6 @@ Pass --paths to override the default location.
 from __future__ import annotations
 
 import os
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import argparse
 import logging
@@ -28,8 +27,16 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from paths_config import load_paths
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def setup_logging(log_file: Path | None = None) -> None:
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file))
+    logging.basicConfig(level=logging.INFO, format=fmt, handlers=handlers)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +103,7 @@ class SFTConfig(BaseModel):
     checkpointing: CheckpointingConfig = Field(default_factory=CheckpointingConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     extra_args: dict[str, Any] = Field(default_factory=dict)
+    env: dict[str, str] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +215,7 @@ def main() -> None:
     parser.add_argument("--paths", default="configs/paths.yaml", help="Path to paths.yaml")
     parser.add_argument("--model_id", help="Override model_id")
     parser.add_argument("--output_dir", help="Override output_dir")
+    parser.add_argument("--log-file", type=str, default=None, help="Path to log file (default: train.log in output_dir)")
     cli = parser.parse_args()
 
     config = load_config(cli.config, cli.paths)
@@ -215,6 +224,13 @@ def main() -> None:
         config = config.model_copy(update={"model_id": cli.model_id})
     if cli.output_dir:
         config = config.model_copy(update={"output_dir": cli.output_dir})
+
+    log_file = Path(cli.log_file) if cli.log_file else Path(config.output_dir) / "train.log"
+    setup_logging(log_file)
+
+    for key, val in config.env.items():
+        os.environ.setdefault(key, str(val))
+        logger.info(f"env[{key}] = {os.environ[key]}")
 
     logger.info(f"Model:    {config.model_id}")
     logger.info(f"Output:   {config.output_dir}")

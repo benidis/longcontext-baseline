@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/infinite_bench_qa_128k
+run_name: infinite_bench_qa_128k
+
+training:
+  max_length: 131072
+
+data:
+  datasets:
+    - ${data_dir}/infinite_bench_qa_128k/development.jsonl

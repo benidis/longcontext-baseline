@@ -1,7 +1,7 @@
 base: ../base.yaml
 
-output_dir: ${output_dir}/clinc150_ruler_64k
-run_name: clinc150_ruler_64k
+output_dir: ${output_dir}/ruler_mk_uuid_64k
+run_name: ruler_mk_uuid_64k
 
 training:
   max_length: 65536
@@ -9,4 +9,3 @@ training:
 data:
   datasets:
     - ${data_dir}/ruler_mk_uuid_64k/development.jsonl
-    - ${data_dir}/clinc150_64k/development.jsonl

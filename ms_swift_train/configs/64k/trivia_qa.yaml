@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/trivia_qa_64k
+run_name: trivia_qa_64k
+
+training:
+  max_length: 65536
+
+data:
+  datasets:
+    - ${data_dir}/trivia_qa_64k/development.jsonl

@@ -1,7 +1,7 @@
 base: ../base.yaml
 
-output_dir: ${output_dir}/nlu_msmacro_128k
-run_name: nlu_msmacro_128k
+output_dir: ${output_dir}/ms_macro_128k
+run_name: ms_macro_128k
 
 training:
   max_length: 131072
@@ -9,4 +9,3 @@ training:
 data:
   datasets:
     - ${data_dir}/ms_macro_128k/development.jsonl
-    - ${data_dir}/nlu_128k/development.jsonl

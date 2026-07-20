@@ -1,7 +1,7 @@
 base: ../base.yaml
 
-output_dir: ${output_dir}/trec_infbenchmc_64k
-run_name: trec_infbenchmc_64k
+output_dir: ${output_dir}/infinite_bench_mc_64k
+run_name: infinite_bench_mc_64k
 
 training:
   max_length: 65536
@@ -9,4 +9,3 @@ training:
 data:
   datasets:
     - ${data_dir}/infinite_bench_mc_64k/development.jsonl
-    - ${data_dir}/trec_coarse_64k/development.jsonl

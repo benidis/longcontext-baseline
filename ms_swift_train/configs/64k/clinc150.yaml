@@ -1,0 +1,11 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/clinc150_64k
+run_name: clinc150_64k
+
+training:
+  max_length: 65536
+
+data:
+  datasets:
+    - ${data_dir}/clinc150_64k/development.jsonl

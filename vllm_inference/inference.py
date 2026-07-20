@@ -7,7 +7,6 @@ import argparse
 import time
 from pathlib import Path
 import logging
-import wandb
 
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.engine.arg_utils import AsyncEngineArgs
@@ -19,12 +18,18 @@ from utils import process_requests
 DEFAULT_DATA_DIR = "/path/to/base_dir/helmet/longtrain_swift"
 DEFAULT_OUTPUT_DIR = "/path/to/results"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
 logger = logging.getLogger("eval")
 
+
+def setup_logging(log_file: Path | None = None) -> None:
+    fmt = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file))
+    logging.basicConfig(level=logging.INFO, format=fmt, handlers=handlers)
+
+os.environ["VLLM_USE_V1"] = "0"  # V1 engine has a broken LoRA LRU cache in 0.8.3
 os.environ["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
 os.environ["VLLM_LOGGING_LEVEL"] = "INFO"
 os.environ["VLLM_ENGINE_ITERATION_TIMEOUT_S"] = "180"
@@ -58,9 +63,16 @@ def detect_lora_adapter(model_path: str):
 
 
 def initialize_engine(base_model: str, max_input_len: int, lora_rank: int | None) -> AsyncLLMEngine:
+    if max_input_len <= 64 * 1024:
+        tensor_parallel_size = 1
+        max_model_len = 72 * 1024  # headroom above 64k, fits in single-GPU KV cache
+    else:
+        tensor_parallel_size = 2
+        max_model_len = 136 * 1024  # headroom above 128k, split across 2 GPUs
+
     engine_kwargs = {
         "model": base_model,
-        "max_model_len": 128 * 1024,
+        "max_model_len": max_model_len,
         "gpu_memory_utilization": 0.9,
         "enforce_eager": True,
         "enable_chunked_prefill": True,
@@ -68,15 +80,11 @@ def initialize_engine(base_model: str, max_input_len: int, lora_rank: int | None
         "kv_cache_dtype": "auto",
         "enable_prefix_caching": True,
         "enable_lora": lora_rank is not None,
+        "tensor_parallel_size": tensor_parallel_size,
     }
 
     if lora_rank is not None:
         engine_kwargs["max_lora_rank"] = lora_rank
-
-    if max_input_len <= 64 * 1024:
-        engine_kwargs["tensor_parallel_size"] = 1
-    else:
-        engine_kwargs["tensor_parallel_size"] = 2
 
     engine_args = AsyncEngineArgs(**engine_kwargs)
     return AsyncLLMEngine.from_engine_args(engine_args)
@@ -191,6 +199,12 @@ if __name__ == "__main__":
         type=int,
         default=16,
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to log file. Defaults to <output-dir>/inference.log next to the predictions.",
+    )
 
     args = parser.parse_args()
 
@@ -214,15 +228,15 @@ if __name__ == "__main__":
             "Expected a _64k or _128k suffix."
         )
 
-    # Detect LoRA adapter once — result is reused for engine init, output path, and wandb
     base_model, adapter_path, lora_rank = detect_lora_adapter(args.model_path)
     is_lora = adapter_path is not None
     if is_lora:
         output_file = Path(args.output_dir) / "finetuned" / args.dataset / f"{args.partition}.jsonl"
-        wandb_name = f"finetuned/{args.dataset}"
     else:
         output_file = Path(args.output_dir) / "baseline" / args.dataset / f"{args.partition}.jsonl"
-        wandb_name = f"baseline/{args.dataset}"
+
+    log_file = Path(args.log_file) if args.log_file else output_file.with_name("inference.log")
+    setup_logging(log_file)
 
     logger.info("=" * 80)
     logger.info(f"Model:    {args.model_path}  ({'LoRA adapter' if is_lora else 'base model'})")
@@ -231,19 +245,6 @@ if __name__ == "__main__":
     logger.info(f"Input:    {input_file}")
     logger.info(f"Output:   {output_file}")
     logger.info("=" * 80)
-
-    wandb.init(
-        project="long-inference",
-        name=wandb_name,
-        config={
-            "model": args.model_path,
-            "is_lora": is_lora,
-            "dataset": args.dataset,
-            "partition": args.partition,
-            "max_length_k": max_length // 1024,
-            "concurrency": args.concurrency,
-        },
-    )
 
     start_time = time.time()
 
@@ -261,5 +262,3 @@ if __name__ == "__main__":
 
     elapsed = time.time() - start_time
     logger.info(f"Inference completed in {elapsed / 60:.2f} minutes")
-    wandb.log({"total_time_min": round(elapsed / 60, 2)})
-    wandb.finish()

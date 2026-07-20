@@ -21,19 +21,10 @@ using [ms-swift](https://github.com/modelscope/ms-swift) as the training backend
 │   ├── run_sft.py                          # Step 3: training entry point
 │   ├── configs/
 │   │   ├── base.yaml                       # shared hyperparameters (LoRA, LR, hardware, …)
-│   │   ├── 64k/                            # per-run deltas for 64k context
-│   │   │   ├── clinc150_ruler.yaml
-│   │   │   ├── hotpot_popqa.yaml
-│   │   │   ├── nlu_msmacro.yaml
-│   │   │   ├── nq_jsonkv.yaml
-│   │   │   ├── trec_infbenchmc.yaml
-│   │   │   └── trivia_infbenchqa.yaml
-│   │   └── 128k/                           # same 6 configs at 128k context
-│   │       └── ...
+│   │   ├── 64k/                            # one config per dataset at 64k context (12 files)
+│   │   └── 128k/                           # one config per dataset at 128k context (12 files)
 │   └── scripts/
-│       ├── download_model.sh               # download Qwen3-4B-Instruct-2507
-│       ├── train_all_64k.sh                # run all 64k configs sequentially
-│       └── train_all_128k.sh               # run all 128k configs sequentially
+│       └── download_model.sh               # download Qwen3-4B-Instruct-2507
 └── vllm_inference/
     ├── inference.py                        # Step 4: vLLM inference (base or LoRA adapter)
     ├── utils.py
@@ -71,10 +62,9 @@ source .venv/bin/activate
 - (no extra) — core deps only: `pydantic`, `pyyaml`. Enough for config loading.
 - `[train]` — adds `deepspeed`, `liger-kernel`, `tensorboard`.
 - `[data]` — adds `keys_values` for dataset preparation (`create_data.py`).
-- `[inference]` — adds `vllm==0.23.0` for inference.
 - `[dev]` — adds `pytest`, `black`, `isort`.
 
-Install what you need:
+Install what you need for training:
 
 ```bash
 uv pip install -e /home/ubuntu/Repos/keys_values
@@ -89,7 +79,6 @@ CUDA version afterwards.
 
 ```bash
 uv pip install ms-swift -U
-uv pip install 'ms-swift[megatron]' -U
 ```
 
 ### 5. Pin PyTorch to CUDA 12.8
@@ -117,10 +106,11 @@ missing, install it first:
 sudo apt install -y nvidia-cuda-toolkit
 ```
 
-Then install FlashAttention:
+Then install FlashAttention. Pin to exactly `2.8.3` — `2.8.3.post1` has a packaging
+quirk that breaks version detection in some backends:
 
 ```bash
-uv pip install flash-attn --no-build-isolation
+uv pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
 ### 7. Configure paths
@@ -175,98 +165,65 @@ The destination is read from `model_dir` in `configs/paths.yaml`.
 
 ### Step 4: Train
 
-#### Option A — HuggingFace backend (default)
+Uses the HuggingFace Trainer + DeepSpeed ZeRO3 with Ulysses sequence parallelism.
 
-Uses the HuggingFace Trainer + DeepSpeed Ulysses sequence parallelism.
+> **Memory note:** `CELOSS_PARALLEL_SIZE=2048` is set automatically by `run_sft.py`
+> (via the `env:` section in `base.yaml`). This chunks cross-entropy loss computation
+> over vocab slices, avoiding a ~19 GB/GPU peak logit tensor at 128k batch=2 that
+> would otherwise OOM on 40 GB GPUs. Do not remove it.
 
 **Single run:**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 \
     ms_swift_train/run_sft.py \
-    --config ms_swift_train/configs/64k/clinc150_ruler.yaml \
+    --config ms_swift_train/configs/64k/clinc150.yaml \
     --paths configs/paths.yaml
 ```
 
-**All 64k runs sequentially:**
+**Full sweep across 3 EC2 instances (24 jobs total):**
+
+Jobs are pre-assigned to 6 groups of 4 GPUs, balanced by dataset size.
+On each instance, run both groups in parallel (background + foreground):
 
 ```bash
-bash ms_swift_train/scripts/train_all_64k.sh
+# On EC2-1
+bash ms_swift_train/scripts/run_group.sh ec2_1_gpu0 &
+bash ms_swift_train/scripts/run_group.sh ec2_1_gpu4
+
+# On EC2-2
+bash ms_swift_train/scripts/run_group.sh ec2_2_gpu0 &
+bash ms_swift_train/scripts/run_group.sh ec2_2_gpu4
+
+# On EC2-3
+bash ms_swift_train/scripts/run_group.sh ec2_3_gpu0 &
+bash ms_swift_train/scripts/run_group.sh ec2_3_gpu4
 ```
 
-**All 128k runs sequentially:**
+Each group runs its jobs sequentially. A failed job is logged and skipped —
+the group continues with the remaining jobs.
 
-```bash
-bash ms_swift_train/scripts/train_all_128k.sh
-```
+Group assignments (sorted large→small so the heaviest job runs first):
 
-Set `NPROC` to match your GPU count (default: 4):
+| Group | Jobs |
+|---|---|
+| `ec2_1_gpu0` | `clinc150_128k`, `pop_qa_64k`, `infinite_bench_mc_64k` |
+| `ec2_1_gpu4` | `nlu_128k`, `trivia_qa_64k`, `json_kv_64k`, `ms_macro_64k` |
+| `ec2_2_gpu0` | `nq_128k`, `nq_64k`, `hotpot_qa_64k`, `ms_macro_128k` |
+| `ec2_2_gpu4` | `trivia_qa_128k`, `pop_qa_128k`, `infinite_bench_qa_128k`, `json_kv_128k`, `ruler_mk_uuid_128k` |
+| `ec2_3_gpu0` | `trec_coarse_128k`, `nlu_64k`, `trec_coarse_64k` |
+| `ec2_3_gpu4` | `hotpot_qa_128k`, `clinc150_64k`, `infinite_bench_mc_128k`, `infinite_bench_qa_64k`, `ruler_mk_uuid_64k` |
 
-```bash
-NPROC=8 bash ms_swift_train/scripts/train_all_64k.sh
-```
+> **Running multiple jobs concurrently:** torchrun defaults to port 29500. If you launch
+> a second job while another is running, add `--master_port=29501` (or any free port) to
+> avoid a "address already in use" error:
+> ```bash
+> CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nproc_per_node=4 --master_port=29501 \
+>     ms_swift_train/run_sft.py \
+>     --config ms_swift_train/configs/64k/hotpot_popqa.yaml \
+>     --paths configs/paths.yaml
+> ```
 
-#### Option B — Megatron backend
-
-Uses Megatron-Core instead of HuggingFace Trainer. Key differences from Option A:
-
-- Sequence parallelism is **ring attention** (`context_parallel_size`), not Ulysses
-- No DeepSpeed — uses Megatron's own DistributedOptimizer (behaves like ZeRO2)
-- Batch size is specified as `micro_batch_size` (per GPU per step) and `global_batch_size` (total across all GPUs and gradient accumulation steps)
-- Liger cross-entropy incompatibility does **not** apply here
-
-Parameters can be passed as CLI flags or as a flat JSON/YAML config file
-(`HfArgumentParser` detects a `.json` or `.yaml` argument and loads it):
-
-```bash
-# CLI flags
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 \
-    -m swift.cli._megatron.sft \
-    --model_id_or_path ${MODEL_DIR}/Qwen/Qwen3-4B-Instruct-2507 \
-    --dataset /path/to/dataset.jsonl \
-    --output_dir ${OUTPUT_DIR} \
-    --context_parallel_size 4 \
-    --micro_batch_size 1 \
-    --global_batch_size 32 \
-    --max_length 65536 \
-    --lora_rank 16 \
-    --lora_alpha 16 \
-    --learning_rate 5e-4 \
-    --num_train_epochs 5
-
-# Config file (flat key-value, all the same fields)
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=29501\
-    -m swift.cli._megatron.sft \
-    ms_swift_train/configs/megatron/clinc150_ruler_64k.json
-```
-
-Example `clinc150_ruler_64k.json`:
-```json
-{
-  "model_id_or_path": "/opt/dlami/nvme/longcontext/checkpoints/Qwen/Qwen3-4B-Instruct-2507",
-  "dataset": ["/opt/dlami/nvme/longcontext/helmet/longtrain_swift/clinc150_64k/train.jsonl",
-              "/opt/dlami/nvme/longcontext/helmet/longtrain_swift/ruler_mk_uuid_64k/train.jsonl"],
-  "output_dir": "/opt/dlami/nvme/longcontext/output/clinc150_ruler_64k_megatron",
-  "context_parallel_size": 4,
-  "micro_batch_size": 1,
-  "global_batch_size": 32,
-  "max_length": 65536,
-  "lora_rank": 16,
-  "lora_alpha": 16,
-  "learning_rate": 5e-4,
-  "num_train_epochs": 5
-}
-```
-
-Note: unlike `base.yaml`, this is a **flat** dict — no nesting, no `${var}` substitution,
-no `base:` inheritance. All fields must be spelled out in full.
-
-`dp_world_size` is derived automatically: `total_gpus / context_parallel_size`.
-With 4 GPUs and `context_parallel_size=4`, dp=1 — same trade-off as the HF backend.
-With `context_parallel_size=2`, dp=2 and Megatron's optimizer shards across 2 replicas.
-
-> **Note:** the Megatron backend requires `ms-swift[megatron]` to be installed
-> (see Environment Setup step 4).
 
 ### Config structure
 
@@ -275,15 +232,36 @@ hardware, logging, etc.). Each per-run config in `64k/` or `128k/` contains
 only the delta — `max_length`, `data.datasets`, `output_dir`, and `run_name`.
 Fields in the per-run config override the base.
 
-> **Note:** the Megatron backend does not use `base.yaml` — all parameters must
-> be passed as CLI flags or a separate config file in Megatron's own format.
-
 ## Inference
 
-> The inference code targets **vLLM 0.23.0** — install exactly that version:
-> ```bash
-> uv pip install vllm==0.23.0
-> ```
+> **Separate venv required.** vLLM must run in its own virtual environment, **not** the
+> training `.venv`. All vLLM versions ≥ 0.11 link against CUDA 13, breaking a CUDA 12
+> training environment. vLLM 0.8.3 (the latest cu12-compatible build) also requires
+> `transformers < 5.0`, which conflicts with ms-swift's `transformers ≥ 4.33, < 5.13`.
+
+### Set up the inference venv (one-time)
+
+```bash
+# Create a separate venv — do NOT reuse the training .venv
+uv venv vllm_inference/.venv --python 3.12
+source vllm_inference/.venv/bin/activate
+
+# PyTorch cu128 first, then vLLM, then pin dependencies
+uv pip install "torch==2.7.0+cu128" --index-url https://download.pytorch.org/whl/cu128
+uv pip install "vllm==0.8.3"
+uv pip install "transformers==4.51.*"   # last 4.x series with Qwen3 support
+uv pip install "cachetools<5"           # vLLM 0.8.3 uses LRUCache internals removed in cachetools 5.x
+
+# Install the package (core deps only — no extras)
+uv pip install -e "."
+```
+
+Switch between venvs:
+
+```bash
+source .venv/bin/activate              # training
+source vllm_inference/.venv/bin/activate   # inference
+```
 
 ```bash
 # Base model
