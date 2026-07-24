@@ -27,12 +27,17 @@ class Paths:
     def data_dir(self) -> Path:
         return self.base_dir / "helmet" / "longtrain_swift"
 
+    @property
+    def results_dir(self) -> Path:
+        return self.base_dir / "results"
+
     def as_dict(self) -> dict[str, str]:
         return {
             "base_dir": str(self.base_dir),
             "model_dir": str(self.model_dir),
             "output_dir": str(self.output_dir),
             "data_dir": str(self.data_dir),
+            "results_dir": str(self.results_dir),
         }
 
 

@@ -259,30 +259,49 @@ uv pip install -e "."
 Switch between venvs:
 
 ```bash
-source .venv/bin/activate              # training
+source .venv/bin/activate                  # training
 source vllm_inference/.venv/bin/activate   # inference
 ```
+
+### Run inference — full sweep (24 datasets)
+
+```bash
+bash vllm_inference/scripts/run_inference_all.sh
+```
+
+Paths are resolved from `configs/paths.yaml` automatically. The script:
+- skips any dataset whose training checkpoint (`v0-*/best`) is not yet present
+- skips any dataset that already has results (`results/finetuned/<dataset>/evaluation.jsonl`)
+- logs failed jobs and continues; exits 1 if any failed
+
+To run a subset, comment out lines in the `JOBS` list inside the script.
+
+### Run inference — single dataset
 
 ```bash
 # Base model
 python vllm_inference/inference.py \
-    --model-path /opt/dlami/nvme/checkpoints/Qwen/Qwen3-4B-Instruct-2507 \
+    --model-path /mnt/efs/<user>/checkpoints/Qwen/Qwen3-4B-Instruct-2507 \
     --dataset nq_64k \
-    --data-dir /opt/dlami/nvme/helmet/longtrain_swift \
-    --output-dir /opt/dlami/nvme/results
+    --data-dir /mnt/efs/<user>/helmet/longtrain_swift \
+    --output-dir /mnt/efs/<user>/results
 
-# Fine-tuned (LoRA adapter)
+# Fine-tuned (LoRA adapter — detected automatically via adapter_config.json)
 python vllm_inference/inference.py \
-    --model-path /opt/dlami/nvme/output/nq_jsonkv_64k \
+    --model-path /mnt/efs/<user>/output/nq_64k/v0-*/best \
     --dataset nq_64k \
-    --data-dir /opt/dlami/nvme/helmet/longtrain_swift \
-    --output-dir /opt/dlami/nvme/results
+    --data-dir /mnt/efs/<user>/helmet/longtrain_swift \
+    --output-dir /mnt/efs/<user>/results
 ```
 
 ## Evaluation
 
 ```bash
-python vllm_inference/evaluate.py /path/to/results
+# Score all results
+python vllm_inference/evaluate.py /mnt/efs/<user>/results
+
+# Score a single file
+python vllm_inference/evaluate.py --file /mnt/efs/<user>/results/finetuned/nq_64k/evaluation.jsonl
 ```
 
 Scores results using **SubEM** (substring exact match).
