@@ -35,7 +35,7 @@ async def process_requests(
 
     sampling_params = SamplingParams(
         temperature=0.7,
-        max_tokens=20,
+        max_tokens=128,
         top_p=0.8,
         top_k=20,
     )
