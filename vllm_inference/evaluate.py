@@ -128,7 +128,7 @@ def _normalize_for_tokens(s: str) -> str:
 
 def _sub_exact_match(response: str, target_value: str) -> bool:
     response = _normalize_string_response(response).lower()
-    target = _normalize_string_response(str(target_value)).lower()
+    target = str(target_value).lower()
     return target in response
 
 
