@@ -41,13 +41,14 @@ def _read_completed_epochs(run_dir: Path) -> float:
 
 
 def _resolve_checkpoint(run_dir: Path) -> Path:
-    last = run_dir / "last"
-    if not last.exists():
-        raise FileNotFoundError(f"'last' symlink not found in {run_dir}")
-    resolved = last.resolve()
-    if not resolved.exists():
-        raise FileNotFoundError(f"'last' symlink points to {resolved} which does not exist")
-    return resolved
+    # Fall back to last_prev/ if a previous resume attempt already renamed last/.
+    for candidate in ("last", "last_prev"):
+        link = run_dir / candidate
+        if link.is_symlink():
+            resolved = link.resolve()
+            if resolved.exists():
+                return resolved
+    raise FileNotFoundError(f"No usable 'last' or 'last_prev' symlink found in {run_dir}")
 
 
 def main() -> None:
@@ -111,15 +112,16 @@ def main() -> None:
     # ms-swift uses bare os.symlink (no overwrite) so existing best/ and last/
     # from the initial run would cause FileExistsError in the training finally-block.
     # Rename them to *_prev so ms-swift can recreate them after the resumed run.
-    # checkpoint was already resolved above, so renaming last/ is safe.
-    for link_name in ("best", "last"):
-        link = run_dir / link_name
-        if link.is_symlink():
-            prev = run_dir / f"{link_name}_prev"
-            if prev.is_symlink():
-                prev.unlink()
-            link.rename(prev)
-            logger.info(f"Renamed {link.name}/ -> {prev.name}/ (target: {prev.resolve()})")
+    # Only local rank 0 touches the filesystem — other ranks skip this block.
+    if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+        for link_name in ("best", "last"):
+            link = run_dir / link_name
+            if link.is_symlink():
+                prev = run_dir / f"{link_name}_prev"
+                if prev.is_symlink():
+                    prev.unlink()
+                link.rename(prev)
+                logger.info(f"Renamed {link.name}/ -> {prev.name}/ (target: {prev.resolve()})")
 
     from swift import SftArguments, sft_main
     sft_main(SftArguments(**build_swift_args(config)))
