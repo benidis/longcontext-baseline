@@ -58,7 +58,7 @@ class LoRAConfig(BaseModel):
 
 class TrainingConfig(BaseModel):
     learning_rate: float = 5e-4
-    max_epochs: int = 5
+    num_train_epochs: int = 5
     max_length: int = 65536
     per_device_train_batch_size: int = 2
     per_device_eval_batch_size: int = 2
@@ -177,7 +177,7 @@ def build_swift_args(config: SFTConfig) -> dict[str, Any]:
         "lora_bias": lora.bias,
         # training
         "learning_rate": t.learning_rate,
-        "max_epochs": t.max_epochs,
+        "num_train_epochs": t.num_train_epochs,
         "max_length": t.max_length,
         "per_device_train_batch_size": t.per_device_train_batch_size,
         "per_device_eval_batch_size": t.per_device_eval_batch_size,
