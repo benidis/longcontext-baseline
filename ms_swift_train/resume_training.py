@@ -90,11 +90,14 @@ def main() -> None:
     logger.info(f"Resuming from checkpoint: {checkpoint}")
 
     # Write into the same run dir so last/ and best/ symlinks are updated in place.
+    # add_version=False prevents ms-swift from appending another v0-TIMESTAMP
+    # subdirectory inside the existing run dir.
     config = config.model_copy(update={
         "output_dir": str(run_dir),
         "extra_args": {
             **config.extra_args,
             "resume_from_checkpoint": str(checkpoint),
+            "add_version": False,
         },
     })
 
@@ -104,6 +107,19 @@ def main() -> None:
     logger.info(f"Model:      {config.model_id}")
     logger.info(f"Output dir: {config.output_dir}")
     logger.info(f"Checkpoint: {checkpoint}")
+
+    # ms-swift uses bare os.symlink (no overwrite) so existing best/ and last/
+    # from the initial run would cause FileExistsError in the training finally-block.
+    # Rename them to *_prev so ms-swift can recreate them after the resumed run.
+    # checkpoint was already resolved above, so renaming last/ is safe.
+    for link_name in ("best", "last"):
+        link = run_dir / link_name
+        if link.is_symlink():
+            prev = run_dir / f"{link_name}_prev"
+            if prev.is_symlink():
+                prev.unlink()
+            link.rename(prev)
+            logger.info(f"Renamed {link.name}/ -> {prev.name}/ (target: {prev.resolve()})")
 
     from swift import SftArguments, sft_main
     sft_main(SftArguments(**build_swift_args(config)))
