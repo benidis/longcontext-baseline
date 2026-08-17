@@ -14,10 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PATHS="${PATHS:-${REPO_ROOT}/configs/paths.yaml}"
 PARTITION="evaluation"
+RUN_NAME="$(date +%Y%m%d_%H%M%S)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --partition) PARTITION="$2"; shift 2 ;;
+        --run-name)  RUN_NAME="$2";  shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -35,6 +37,7 @@ EOF
 echo "output_dir : ${OUTPUT_DIR}"
 echo "data_dir   : ${DATA_DIR}"
 echo "results    : ${OUTPUT_ROOT}"
+echo "run_name   : ${RUN_NAME}"
 echo "partition  : ${PARTITION}"
 echo ""
 
@@ -74,18 +77,10 @@ JOBS=(
 FAILED=()
 
 for DATASET in "${JOBS[@]}"; do
-    # Find the best checkpoint; skip if training is not done yet.
-    MODEL_PATH=$(echo "${OUTPUT_DIR}/${DATASET}"/v0-*/best 2>/dev/null | tr ' ' '\n' | head -1)
+    # Find the best checkpoint from the latest training run; skip if not done yet.
+    MODEL_PATH=$(echo "${OUTPUT_DIR}/${DATASET}"/v*-*/best 2>/dev/null | tr ' ' '\n' | tail -1)
     if [[ ! -d "${MODEL_PATH:-}" ]]; then
         echo "SKIP  ${DATASET}: no checkpoint found (training incomplete or not started)"
-        continue
-    fi
-
-    # Skip if results already exist (inference.py uses .tmp → rename, so a .jsonl
-    # file is only written on success — no risk of treating partial results as done).
-    RESULT_FILE="${OUTPUT_ROOT}/finetuned/${DATASET}/${PARTITION}.jsonl"
-    if [[ -f "${RESULT_FILE}" ]]; then
-        echo "SKIP  ${DATASET}: results already exist at ${RESULT_FILE}"
         continue
     fi
 
@@ -100,6 +95,7 @@ for DATASET in "${JOBS[@]}"; do
         --partition  "${PARTITION}" \
         --data-dir   "${DATA_DIR}" \
         --output-dir "${OUTPUT_ROOT}" \
+        --run-name   "${RUN_NAME}" \
         && echo "--- Done: ${DATASET} at $(date) ---" \
         || { echo "--- FAILED: ${DATASET} at $(date) ---" >&2; FAILED+=("${DATASET}"); }
 done

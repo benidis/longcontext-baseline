@@ -99,6 +99,7 @@ def main() -> None:
             **config.extra_args,
             "resume_from_checkpoint": str(checkpoint),
             "add_version": False,
+            "eval_on_start": False,
         },
     })
 

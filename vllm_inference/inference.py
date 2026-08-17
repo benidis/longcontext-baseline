@@ -5,6 +5,7 @@ import asyncio
 import inspect
 import argparse
 import time
+from datetime import datetime
 from pathlib import Path
 import logging
 
@@ -190,9 +191,13 @@ if __name__ == "__main__":
         "--output-dir",
         type=str,
         default=DEFAULT_OUTPUT_DIR,
-        help="Base output directory. "
-             "Base model results go to <output-dir>/<model_name>/<dataset>. "
-             "LoRA results go to <output-dir>/finetuned/<dataset>.",
+        help="Base output directory.",
+    )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="Subdirectory name under --output-dir for this run (default: current timestamp).",
     )
     parser.add_argument(
         "--concurrency",
@@ -228,12 +233,14 @@ if __name__ == "__main__":
             "Expected a _64k or _128k suffix."
         )
 
+    run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
+
     base_model, adapter_path, lora_rank = detect_lora_adapter(args.model_path)
     is_lora = adapter_path is not None
     if is_lora:
-        output_file = Path(args.output_dir) / "finetuned" / args.dataset / f"{args.partition}.jsonl"
+        output_file = Path(args.output_dir) / run_name / "finetuned" / args.dataset / f"{args.partition}.jsonl"
     else:
-        output_file = Path(args.output_dir) / "baseline" / args.dataset / f"{args.partition}.jsonl"
+        output_file = Path(args.output_dir) / run_name / "baseline" / args.dataset / f"{args.partition}.jsonl"
 
     log_file = Path(args.log_file) if args.log_file else output_file.with_name("inference.log")
     setup_logging(log_file)
