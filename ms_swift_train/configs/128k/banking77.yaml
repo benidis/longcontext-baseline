@@ -8,4 +8,6 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/banking77_128k/development.jsonl
+    - ${data_dir}/banking77_128k/train.jsonl
+  val_datasets:
+    - ${data_dir}/banking77_128k/val.jsonl
