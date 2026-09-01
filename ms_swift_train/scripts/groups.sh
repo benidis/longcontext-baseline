@@ -8,55 +8,47 @@ resolve_group() {
         ec2_1_gpu0)
             GPUS="0,1,2,3"
             CONFIGS=(
-                "128k/nlu"      
+                "128k/clinc150"
             )
             ;;
         ec2_1_gpu4)
             GPUS="4,5,6,7"
             CONFIGS=(
-                "128k/clinc150"
+                "128k/nlu"
+                "128k/infinite_bench_mc"
             )
             ;;
         ec2_2_gpu0)
             GPUS="0,1,2,3"
             CONFIGS=(
-                "128k/nq"
-                "64k/nq"
+                "128k/trec_coarse"
                 "64k/hotpot_qa"
-                "128k/ms_macro"
-                "64k/trivia_qa"
+                "128k/json_kv"
+                "64k/pop_qa"
             )
             ;;
         ec2_2_gpu4)
             GPUS="4,5,6,7"
             CONFIGS=(
-                "128k/trivia_qa"
+                "128k/nq"
+                "64k/nq"
+                "64k/trivia_qa"
                 "128k/pop_qa"
-                "128k/infinite_bench_qa"
-                "128k/json_kv"
-                "128k/ruler_mk_uuid"
             )
             ;;
         ec2_3_gpu0)
             GPUS="0,1,2,3"
             CONFIGS=(
-                "128k/trec_coarse"
-                "64k/nlu"
-                "64k/trec_coarse"
-                "64k/pop_qa"
-                "64k/infinite_bench_mc"
-                "64k/ms_macro"
+                "128k/hotpot_qa"
+                "128k/trivia_qa"
+                "128k/infinite_bench_qa"
             )
             ;;
         ec2_3_gpu4)
             GPUS="4,5,6,7"
             CONFIGS=(
-                "128k/hotpot_qa"
-                "64k/clinc150"
-                "128k/infinite_bench_mc"
-                "64k/infinite_bench_qa"
-                "64k/ruler_mk_uuid"
-                "64k/json_kv"
+                "128k/banking77"
+                "128k/trec_fine"
             )
             ;;
         *)

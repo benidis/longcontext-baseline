@@ -80,7 +80,7 @@ NEEDS_TOKENIZER = {"infinite_bench_qa", "infinite_bench_mc"}
 
 RAG_KEYS = [
     "nq", "trivia_qa", "hotpot_qa", "pop_qa",
-    "ms_macro", "trec_coarse", "nlu", "clinc150",
+    "ms_macro", "trec_coarse", "trec_fine", "nlu", "clinc150", "banking77",
     "infinite_bench_qa", "infinite_bench_mc", "json_kv", "ruler_mk_uuid",
 ]
 

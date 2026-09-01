@@ -20,6 +20,7 @@ training:
   gradient_accumulation_steps: 4
   warmup_ratio: 0.15
   truncation_strategy: left
+  split_dataset_ratio: 0.1
   optim: adamw_torch
 
 hardware:
