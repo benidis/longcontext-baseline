@@ -8,4 +8,6 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/ruler_mk_uuid_64k/development.jsonl
+    - ${data_dir}/ruler_mk_uuid_64k/train.jsonl
+  val_datasets:
+    - ${data_dir}/ruler_mk_uuid_64k/val.jsonl

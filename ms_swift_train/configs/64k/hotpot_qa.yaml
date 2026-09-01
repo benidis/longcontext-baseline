@@ -8,4 +8,6 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/hotpot_qa_64k/development.jsonl
+    - ${data_dir}/hotpot_qa_64k/train.jsonl
+  val_datasets:
+    - ${data_dir}/hotpot_qa_64k/val.jsonl

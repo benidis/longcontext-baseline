@@ -8,4 +8,6 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/nlu_128k/development.jsonl
+    - ${data_dir}/nlu_128k/train.jsonl
+  val_datasets:
+    - ${data_dir}/nlu_128k/val.jsonl

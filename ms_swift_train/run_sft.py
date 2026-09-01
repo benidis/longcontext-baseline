@@ -46,6 +46,7 @@ def setup_logging(log_file: Path | None = None) -> None:
 
 class DataConfig(BaseModel):
     datasets: list[str] = Field(default_factory=list)
+    val_datasets: list[str] = Field(default_factory=list)
 
 
 class LoRAConfig(BaseModel):
@@ -65,7 +66,6 @@ class TrainingConfig(BaseModel):
     gradient_accumulation_steps: int = 4
     warmup_ratio: float = 0.15
     truncation_strategy: str = "left"
-    split_dataset_ratio: float = 0.1
     optim: str = "adamw_torch"
 
 
@@ -168,6 +168,7 @@ def build_swift_args(config: SFTConfig) -> dict[str, Any]:
         "output_dir": config.output_dir,
         "run_name": config.run_name,
         "dataset": config.data.datasets,
+        "val_dataset": config.data.val_datasets,
         # LoRA
         "tuner_type": "lora",
         "lora_rank": lora.rank,
@@ -184,7 +185,6 @@ def build_swift_args(config: SFTConfig) -> dict[str, Any]:
         "gradient_accumulation_steps": t.gradient_accumulation_steps,
         "warmup_ratio": t.warmup_ratio,
         "truncation_strategy": t.truncation_strategy,
-        "split_dataset_ratio": t.split_dataset_ratio,
         "optim": t.optim,
         # hardware
         "torch_dtype": hw.torch_dtype,

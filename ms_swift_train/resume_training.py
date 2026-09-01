@@ -98,6 +98,7 @@ def main() -> None:
         "extra_args": {
             **config.extra_args,
             "resume_from_checkpoint": str(checkpoint),
+            # "resume_only_model": True,  # reset LR scheduler + optimizer; model weights loaded from ckpt
             "add_version": False,
             "eval_on_start": False,
         },
@@ -123,6 +124,64 @@ def main() -> None:
                     prev.unlink()
                 link.rename(prev)
                 logger.info(f"Renamed {link.name}/ -> {prev.name}/ (target: {prev.resolve()})")
+
+    # DeepSpeed 0.18.x ZeRO-3 CPU-offload resume fix.
+    #
+    # Root cause: after checkpoint load, cpuadam.lr = 0.0 (end of previous cosine
+    # schedule). The resumed lr_scheduler updates a DummyOptimizer, not cpuadam,
+    # so every Adam step fires with lr=0 and fp32_flat_groups (the LoRA weights)
+    # never change — even though loss and momentum keep moving.
+    #
+    # Fix part 1: _rigid_load_state_dict — restore cpuadam.lr to initial_lr and
+    # capture the cpuadam instance reference for part 2.
+    #
+    # Fix part 2: AcceleratedScheduler.step — after each scheduler step, write the
+    # computed lr directly into the captured cpuadam instance.
+    _g_cpuadam = [None]  # filled by part 1, read by part 2
+
+    import deepspeed.runtime.zero.stage3 as _ds_z3
+    _orig_rigid_load = _ds_z3.DeepSpeedZeroOptimizer_Stage3._rigid_load_state_dict
+
+    def _fixed_rigid_load(self, state_dict, load_optimizer_states=True):
+        _orig_rigid_load(self, state_dict, load_optimizer_states)
+        if load_optimizer_states:
+            opt_sd = state_dict.get("optimizer_state_dict", {})
+            for pg, spg in zip(self.optimizer.param_groups,
+                               opt_sd.get("param_groups", [])):
+                ilr = spg.get("initial_lr")
+                if ilr and ilr > 0:
+                    pg["lr"] = ilr
+            _g_cpuadam[0] = self.optimizer
+        logger.info(f"[DS fix part1] cpuadam captured, lr="
+                    f"{[pg['lr'] for pg in self.optimizer.param_groups]}")
+
+    _ds_z3.DeepSpeedZeroOptimizer_Stage3._rigid_load_state_dict = _fixed_rigid_load
+
+    from torch.optim.lr_scheduler import LambdaLR as _LambdaLR
+    _orig_lambdalr_step = _LambdaLR.step
+    _sched_call_count = [0]
+
+    def _lr_syncing_lambdalr_step(self, *args, **kwargs):
+        result = _orig_lambdalr_step(self, *args, **kwargs)
+        _sched_call_count[0] += 1
+        cpuadam = _g_cpuadam[0]
+        if cpuadam is not None:
+            try:
+                scheduled_lr = self.get_last_lr()[0]
+                for pg in cpuadam.param_groups:
+                    pg["lr"] = scheduled_lr
+                if _sched_call_count[0] <= 3:
+                    print(f"[DS fix part2] LambdaLR step {_sched_call_count[0]}: "
+                          f"synced lr={scheduled_lr:.6e} to cpuadam", flush=True)
+            except Exception as e:
+                print(f"[DS fix part2] LambdaLR ERROR step {_sched_call_count[0]}: {e}",
+                      flush=True)
+        elif _sched_call_count[0] <= 3:
+            print(f"[DS fix part2] LambdaLR step {_sched_call_count[0]}: "
+                  f"cpuadam not yet captured", flush=True)
+        return result
+
+    _LambdaLR.step = _lr_syncing_lambdalr_step
 
     from swift import SftArguments, sft_main
     sft_main(SftArguments(**build_swift_args(config)))
