@@ -8,6 +8,4 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/infinite_bench_qa_64k/train.jsonl
-  val_datasets:
-    - ${data_dir}/infinite_bench_qa_64k/val.jsonl
+    - ${data_dir}/infinite_bench_qa_64k/development.jsonl

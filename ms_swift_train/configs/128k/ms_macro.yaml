@@ -8,6 +8,4 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/ms_macro_128k/train.jsonl
-  val_datasets:
-    - ${data_dir}/ms_macro_128k/val.jsonl
+    - ${data_dir}/ms_macro_128k/development.jsonl

@@ -189,10 +189,13 @@ def convert_dataset(
         print("  evaluation: missing, skipped")
 
 
-def _iter_dataset_dirs(data_root: Path) -> list[Path]:
+def _iter_dataset_dirs(data_root: Path, seq_len: str) -> list[Path]:
     return [
         p for p in sorted(data_root.iterdir())
-        if p.is_dir() and (p / "development").is_dir() and (p / "evaluation").is_dir()
+        if p.is_dir()
+        and p.name.endswith(f"_{seq_len}")
+        and (p / "development").is_dir()
+        and (p / "evaluation").is_dir()
     ]
 
 
@@ -222,7 +225,7 @@ def main() -> None:
             metadata = json.load(f)
         print(f"Loaded metadata from {args.metadata}")
 
-    dataset_dirs = [data_root / args.dataset] if args.dataset else _iter_dataset_dirs(data_root)
+    dataset_dirs = [data_root / args.dataset] if args.dataset else _iter_dataset_dirs(data_root, args.seq_len)
     if not dataset_dirs:
         raise RuntimeError("No dataset directories found.")
 

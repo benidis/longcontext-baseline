@@ -8,6 +8,4 @@ training:
 
 data:
   datasets:
-    - ${data_dir}/json_kv_64k/train.jsonl
-  val_datasets:
-    - ${data_dir}/json_kv_64k/val.jsonl
+    - ${data_dir}/json_kv_64k/development.jsonl
