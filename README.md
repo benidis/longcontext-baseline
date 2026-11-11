@@ -168,9 +168,47 @@ The destination is read from `model_dir` in `configs/paths.yaml`.
 Uses the HuggingFace Trainer + DeepSpeed ZeRO3 with Ulysses sequence parallelism.
 
 > **Memory note:** `CELOSS_PARALLEL_SIZE=2048` is set automatically by `run_sft.py`
-> (via the `env:` section in `base.yaml`). This chunks cross-entropy loss computation
-> over vocab slices, avoiding a ~19 GB/GPU peak logit tensor at 128k batch=2 that
-> would otherwise OOM on 40 GB GPUs. Do not remove it.
+> (via the `env:` section in `base.yaml`). This chunks the CE backward pass to reduce
+> peak gradient memory (~18 GB → ~1.2 GB per chunk during backward). It does **not**
+> prevent the `lm_head` matmul from materialising the full logit tensor. Do not remove it.
+>
+> **Library patches required:** the training venv requires three one-time patches to
+> `liger_kernel` and `ms-swift` to fix an OOM during in-training eval at 128k context
+> (logit matrix does not fit alongside ZeRO-3 gathered params). Run once per machine
+> after setting up the venv:
+>
+> ```bash
+> cd /home/ubuntu/Repos/longcontext-baseline && python3 - << 'EOF'
+> import pathlib
+>
+> # Patch 1: liger_kernel — gracefully handle skip_logits=True with no labels (SP eval path)
+> p1 = pathlib.Path('.venv/lib/python3.12/site-packages/liger_kernel/transformers/model/qwen3.py')
+> t = p1.read_text()
+> old = 'raise ValueError("skip_logits is True, but labels and shift_labels are None")'
+> new = 'skip_logits = False  # SP eval: labels absent, fall back to logit path'
+> assert old in t, 'P1 pattern not found'
+> p1.write_text(t.replace(old, new))
+> print('patch 1 applied:', p1)
+>
+> # Patch 2: ms-swift — don't pop labels before model call during eval (SP path)
+> p2 = pathlib.Path('.venv/lib/python3.12/site-packages/swift/trainers/seq2seq_trainer.py')
+> t = p2.read_text()
+> old = "or self.template.sequence_parallel_size > 1) and 'labels' in inputs:"
+> new = "or (self.template.sequence_parallel_size > 1 and self.model.training)) and 'labels' in inputs:"
+> assert old in t, 'P2 pattern not found'
+> p2.write_text(t.replace(old, new))
+> print('patch 2 applied:', p2)
+>
+> # Patch 3: liger_kernel — allow fused CE (skip_logits=True) during eval when labels present
+> p3 = pathlib.Path('.venv/lib/python3.12/site-packages/liger_kernel/transformers/model/qwen3.py')
+> t = p3.read_text()
+> old = 'skip_logits = self.training and (labels is not None or shift_labels is not None)'
+> new = 'skip_logits = labels is not None or shift_labels is not None'
+> assert old in t, 'P3 pattern not found'
+> p3.write_text(t.replace(old, new))
+> print('patch 3 applied:', p3)
+> EOF
+> ```
 
 **Single run:**
 

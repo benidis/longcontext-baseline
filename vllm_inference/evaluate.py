@@ -252,18 +252,70 @@ def _eval_synthetic(responses: List[str], targets: List[str]) -> float:
     return sum(scores) / len(scores)
 
 
+def _eval_match_first(responses: List[str], targets: List[List[str]]) -> float:
+    scores = []
+    for resp, tgt in zip(responses, targets):
+        scores.append(initial_word_or_row(resp, tgt))
+    return sum(scores) / len(scores)
+
+
+def _normalize(row: str) -> str:
+    return " ".join(x.lower() for x in row.split())
+
+
+def initial_word_or_row(
+    response: str,
+    targets: List[str],
+) -> float:
+    """
+    This metric returns 1 if
+
+    * `targets` contains at least 1 single word, and the initial word
+      in `response` equals to an entry in `targets`; or
+    * `targets` contains at least 1 entry with whitespace, and the initial
+      row in `response` (until first "\n") equals to an entry of `targets`.
+
+    Normalization strips multiple whitespace and converts to lower case.
+
+    """
+    extracts = []
+    targets = [_normalize(t) for t in targets]
+    num_notwords = sum(" " in t for t in targets)
+    if num_notwords < len(targets):
+        # At least one single word target:
+        # Extract initial single word
+        words = response.split()
+        if not words:
+            return 0.0
+        extracts.append(words[0].lower())
+    if num_notwords > 0:
+        # At least one target longer than single word:
+        # Extract initial row (until first \n)
+        rows = response.split("\n")
+        if not rows:
+            return 0.0
+        extracts.append(_normalize(rows[0]))
+    return int(any(x == y for x in extracts for y in targets))
+
+
 # ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
 
 DATASET_METRICS = {
-    "nq":                ("sub_exact_match", "SubEM"),
-    "trivia_qa":         ("sub_exact_match", "SubEM"),
-    "pop_qa":            ("sub_exact_match", "SubEM"),
-    "hotpot_qa":         ("sub_exact_match", "SubEM"),
+    "nq":                ("match_first_word_or_phrase", "MatchFirst"),
+    "trivia_qa":         ("match_first_word_or_phrase", "MatchFirst"),
+    "pop_qa":            ("match_first_word_or_phrase", "MatchFirst"),
+    "hotpot_qa":         ("match_first_word_or_phrase", "MatchFirst"),
+#    "nq":                ("sub_exact_match", "SubExact"),
+#    "trivia_qa":         ("sub_exact_match", "SubExact"),
+#    "pop_qa":            ("sub_exact_match", "SubExact"),
+#    "hotpot_qa":         ("sub_exact_match", "SubExact"),
     "ms_macro":          ("ndcg_at_10",      "NDCG@10"),
     "trec_coarse":       ("exact_match_icl", "ExactMatch"),
+    "trec_fine":         ("exact_match_icl", "ExactMatch"),
     "nlu":               ("exact_match_icl", "ExactMatch"),
+    "banking77":         ("exact_match_icl", "ExactMatch"),
     "clinc150":          ("exact_match_icl", "ExactMatch"),
     "infinite_bench_qa": ("rouge_n_f1",      "ROUGE-1 F1"),
     "infinite_bench_mc": ("infinite_mc",     "ExactMatch"),
@@ -303,6 +355,8 @@ def evaluate_file(path: Path) -> dict:
 
     if metric == "sub_exact_match":
         score = _eval_rag(responses, [parse_targets(t) for t in raw_targets])
+    elif metric == "match_first_word_or_phrase":
+        score = _eval_match_first(responses, [parse_targets(t) for t in raw_targets])
     elif metric == "ndcg_at_10":
         score = _eval_rerank(responses, raw_targets)
     elif metric == "exact_match_icl":

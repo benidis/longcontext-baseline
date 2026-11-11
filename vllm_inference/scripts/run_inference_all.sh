@@ -71,6 +71,8 @@ JOBS=(
     pop_qa_128k
     ruler_mk_uuid_128k
     trec_coarse_128k
+    trec_fine_128k
+    banking77_128k
     trivia_qa_128k
 )
 
