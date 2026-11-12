@@ -51,9 +51,19 @@ resolve_group() {
                 "128k/trec_fine"
             )
             ;;
+        ruler_256k)
+            GPUS="0,1,2,3,4,5,6,7"
+            GROUP_NPROC=8
+            CONFIGS=(
+                "256k/cwe"
+                "256k/fwe"
+                "256k/niah_single_1"
+                "256k/vt"
+            )
+            ;;
         *)
             echo "Unknown group: ${GROUP}"
-            echo "Valid group IDs: ec2_1_gpu0 ec2_1_gpu4 ec2_2_gpu0 ec2_2_gpu4 ec2_3_gpu0 ec2_3_gpu4"
+            echo "Valid group IDs: ec2_1_gpu0 ec2_1_gpu4 ec2_2_gpu0 ec2_2_gpu4 ec2_3_gpu0 ec2_3_gpu4 ruler_256k"
             return 1
             ;;
     esac

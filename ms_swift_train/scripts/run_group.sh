@@ -31,7 +31,7 @@ resolve_group "${GROUP}" || exit 1
 FIRST_GPU="${GPUS%%,*}"
 PORT=$((29500 + FIRST_GPU))
 
-NPROC="${NPROC:-4}"
+NPROC="${NPROC:-${GROUP_NPROC:-4}}"
 PATHS="${PATHS:-${REPO_ROOT}/configs/paths.yaml}"
 
 echo "========================================"
