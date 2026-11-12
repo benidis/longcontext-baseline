@@ -140,6 +140,7 @@ def convert_dataset(
     model_name: str,
     val_fraction: str,
     metadata: dict | None,
+    num_samples: str | None = None,
 ) -> None:
     ds_key = _dataset_key(ds_dir.name, seq_len)
     is_list_dataset = ds_key in LIST_TARGET_DATASETS
@@ -161,7 +162,16 @@ def convert_dataset(
                     .get(model_name, {})
                     .get(val_fraction)
                 )
-            # Flat layout (RULER): dir_name -> {train, val}
+            # Nested layout with num_samples (RULER): ds_key -> seq_len -> num_samples -> model -> fraction
+            if split_info is None and ds_key and num_samples:
+                split_info = (
+                    tvs.get(ds_key, {})
+                    .get(seq_len, {})
+                    .get(num_samples, {})
+                    .get(model_name, {})
+                    .get(val_fraction)
+                )
+            # Flat layout fallback: dir_name -> {train, val}
             if split_info is None:
                 flat = tvs.get(ds_dir.name)
                 if isinstance(flat, dict) and "train" in flat and "val" in flat:
@@ -232,6 +242,8 @@ def main() -> None:
                         help="Model name key in the metadata. Default: Qwen3-4B-Instruct-2507")
     parser.add_argument("--val-fraction", default="0.1",
                         help="Val-fraction key in train_val_split. Default: 0.1")
+    parser.add_argument("--num-samples", default=None,
+                        help="num_samples key in RULER-style metadata (e.g. 500).")
     args = parser.parse_args()
 
     paths = load_paths(args.paths)
@@ -255,7 +267,7 @@ def main() -> None:
     for ds_dir in dataset_dirs:
         if not ds_dir.exists():
             raise FileNotFoundError(f"Dataset directory not found: {ds_dir}")
-        convert_dataset(ds_dir, out_root, args.seq_len, args.model_name, args.val_fraction, metadata)
+        convert_dataset(ds_dir, out_root, args.seq_len, args.model_name, args.val_fraction, metadata, args.num_samples)
 
 
 if __name__ == "__main__":
