@@ -163,9 +163,15 @@ def convert_dataset(
                     .get(val_fraction)
                 )
             # Nested layout with num_samples (RULER): ds_key -> seq_len -> num_samples -> model -> fraction
-            if split_info is None and ds_key and num_samples:
+            # RULER dirs are named e.g. cwe_256k_500 — strip _{seq_len}_{num_samples} to get the key
+            ruler_key = None
+            if num_samples:
+                ruler_suffix = f"_{seq_len}_{num_samples}"
+                if ds_dir.name.endswith(ruler_suffix):
+                    ruler_key = ds_dir.name[: -len(ruler_suffix)]
+            if split_info is None and ruler_key:
                 split_info = (
-                    tvs.get(ds_key, {})
+                    tvs.get(ruler_key, {})
                     .get(seq_len, {})
                     .get(num_samples, {})
                     .get(model_name, {})
@@ -199,8 +205,9 @@ def convert_dataset(
                 w, s = _write_jsonl(out_jsonl, sel_inputs, sel_outputs, choices=choices)
                 print(f"  {split_name}: wrote {w}, skipped {s}  →  {out_jsonl}")
         else:
-            if metadata and ds_key:
-                print(f"  WARNING: no train_val_split for {ds_key}/{seq_len}/{model_name} — writing full dev")
+            effective_key = ds_key or ruler_key if metadata else None
+            if metadata and effective_key:
+                print(f"  WARNING: no train_val_split for {effective_key}/{seq_len}/{model_name} — writing full dev")
             out_jsonl = out_root / ds_dir.name / "development.jsonl"
             w, s = _write_jsonl(out_jsonl, dev_inputs, dev_outputs)
             print(f"  development: wrote {w}, skipped {s}  →  {out_jsonl}")
