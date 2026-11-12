@@ -6,9 +6,16 @@ Reads from dataset folders like:
   <data_root>/<dataset_name>/evaluation
 
 When --metadata is given, the development split is divided into train.jsonl
-and val.jsonl using the exact split indices from helmet_metadata.json. For
-datasets with list-valued outputs (nq, trivia_qa, hotpot_qa, pop_qa), the
-per-sample answer index from target_choice is used as the SFT label.
+and val.jsonl using the exact split indices from the metadata JSON. The
+metadata supports two layouts:
+
+  HELMET (nested):  train_val_split -> ds_key -> seq_len -> model -> fraction
+  Flat (e.g. RULER): train_val_split -> dir_name -> {train, val}
+
+The script tries the nested layout first, then falls back to flat lookup by
+directory name. For datasets with list-valued outputs (nq, trivia_qa,
+hotpot_qa, pop_qa), the per-sample answer index from target_choice is used
+as the SFT label.
 
 When --metadata is not given (or a dataset has no entry in the metadata), the
 full development split is written to development.jsonl as before.
@@ -22,6 +29,11 @@ Usage:
         --metadata /mnt/efs/out/finetune/data/helmet_metadata.json \
         --seq-len 64k \
         --model-name Qwen3-4B-Instruct-2507
+
+    python ms_swift_train/convert_to_swift_messages.py \
+        --paths configs/paths.yaml \
+        --metadata /mnt/efs/out/finetune/data/ruler_metadata_with_split.json \
+        --suffix 256k_500
 
 Convert a single dataset only:
     python ms_swift_train/convert_to_swift_messages.py \
@@ -139,14 +151,21 @@ def convert_dataset(
         dev_inputs, dev_outputs = _read_arrow(dev_path)
 
         split_info = None
-        if metadata and ds_key:
-            split_info = (
-                metadata.get("train_val_split", {})
-                .get(ds_key, {})
-                .get(seq_len, {})
-                .get(model_name, {})
-                .get(val_fraction)
-            )
+        if metadata:
+            tvs = metadata.get("train_val_split", {})
+            # Nested layout (HELMET): ds_key -> seq_len -> model -> fraction
+            if ds_key:
+                split_info = (
+                    tvs.get(ds_key, {})
+                    .get(seq_len, {})
+                    .get(model_name, {})
+                    .get(val_fraction)
+                )
+            # Flat layout (RULER): dir_name -> {train, val}
+            if split_info is None:
+                flat = tvs.get(ds_dir.name)
+                if isinstance(flat, dict) and "train" in flat and "val" in flat:
+                    split_info = flat
 
         if split_info is not None:
             train_idx = split_info["train"]
@@ -189,11 +208,11 @@ def convert_dataset(
         print("  evaluation: missing, skipped")
 
 
-def _iter_dataset_dirs(data_root: Path, seq_len: str) -> list[Path]:
+def _iter_dataset_dirs(data_root: Path, suffix: str) -> list[Path]:
     return [
         p for p in sorted(data_root.iterdir())
         if p.is_dir()
-        and p.name.endswith(f"_{seq_len}")
+        and p.name.endswith(f"_{suffix}")
         and (p / "development").is_dir()
         and (p / "evaluation").is_dir()
     ]
@@ -204,8 +223,11 @@ def main() -> None:
     parser.add_argument("--paths", default="configs/paths.yaml")
     parser.add_argument("--dataset", default=None, help="Single dataset folder name, e.g. nq_64k")
     parser.add_argument("--metadata", default=None, help="Path to helmet_metadata.json")
-    parser.add_argument("--seq-len", default="64k", choices=["16k", "32k", "64k", "128k"],
+    parser.add_argument("--seq-len", default="64k",
                         help="Sequence-length bucket (used to look up metadata keys). Default: 64k")
+    parser.add_argument("--suffix", default=None,
+                        help="Directory name suffix for auto-discovery (e.g. 256k_500). "
+                             "Defaults to the value of --seq-len.")
     parser.add_argument("--model-name", default="Qwen3-4B-Instruct-2507",
                         help="Model name key in the metadata. Default: Qwen3-4B-Instruct-2507")
     parser.add_argument("--val-fraction", default="0.1",
@@ -225,7 +247,8 @@ def main() -> None:
             metadata = json.load(f)
         print(f"Loaded metadata from {args.metadata}")
 
-    dataset_dirs = [data_root / args.dataset] if args.dataset else _iter_dataset_dirs(data_root, args.seq_len)
+    suffix = args.suffix or args.seq_len
+    dataset_dirs = [data_root / args.dataset] if args.dataset else _iter_dataset_dirs(data_root, suffix)
     if not dataset_dirs:
         raise RuntimeError("No dataset directories found.")
 

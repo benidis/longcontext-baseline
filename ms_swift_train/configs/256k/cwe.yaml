@@ -1,0 +1,19 @@
+base: ../base.yaml
+
+output_dir: ${output_dir}/cwe_256k_500
+run_name: cwe_256k_500
+
+training:
+  max_length: 262144
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+
+hardware:
+  sequence_parallel_size: 8
+  max_model_len: 262144
+
+data:
+  datasets:
+    - ${data_dir}/cwe_256k_500/train.jsonl
+  val_datasets:
+    - ${data_dir}/cwe_256k_500/val.jsonl
