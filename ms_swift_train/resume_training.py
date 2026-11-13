@@ -48,6 +48,8 @@ def _resolve_checkpoint(run_dir: Path) -> Path:
             resolved = link.resolve()
             if resolved.exists():
                 return resolved
+        elif link.is_dir():
+            return link
     raise FileNotFoundError(f"No usable 'last' or 'last_prev' symlink found in {run_dir}")
 
 
