@@ -67,9 +67,12 @@ def initialize_engine(base_model: str, max_input_len: int, lora_rank: int | None
     if max_input_len <= 64 * 1024:
         tensor_parallel_size = 1
         max_model_len = 72 * 1024  # headroom above 64k, fits in single-GPU KV cache
-    else:
+    elif max_input_len <= 128 * 1024:
         tensor_parallel_size = 2
         max_model_len = 136 * 1024  # headroom above 128k, split across 2 GPUs
+    else:
+        tensor_parallel_size = 4
+        max_model_len = 272 * 1024  # headroom above 256k, split across 4 GPUs
 
     engine_kwargs = {
         "model": base_model,
@@ -227,10 +230,12 @@ if __name__ == "__main__":
         max_length = 64 * 1024
     elif "_128k" in args.dataset:
         max_length = 128 * 1024
+    elif "_256k" in args.dataset:
+        max_length = 256 * 1024
     else:
         raise ValueError(
             f"Cannot infer max length from dataset name '{args.dataset}'. "
-            "Expected a _64k or _128k suffix."
+            "Expected a _64k, _128k, or _256k suffix."
         )
 
     run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")

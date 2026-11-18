@@ -74,6 +74,11 @@ JOBS=(
     trec_fine_128k
     banking77_128k
     trivia_qa_128k
+    # 256k
+    cwe_256k_500
+    fwe_256k_500
+    niah_single_1_256k_500
+    vt_256k_500
 )
 
 FAILED=()
