@@ -242,6 +242,23 @@ def _eval_infinite_mc(responses: List[str], targets: List[str]) -> float:
     return sum(scores) / len(scores)
 
 
+def _eval_word_recall(responses: List[str], targets: List[str]) -> float:
+    """Word-level recall for RULER CWE/FWE: fraction of gold words present in prediction."""
+    def _words(text: str) -> Set[str]:
+        # strip numbering like "1. " or "1) " then split on whitespace/punctuation
+        cleaned = re.sub(r"\d+[.)]\s*", " ", text)
+        return {w.lower().strip(".,;:\"'") for w in cleaned.split() if w.strip(".,;:\"'")}
+
+    scores = []
+    for resp, tgt in zip(responses, targets):
+        gold_words = _words(tgt)
+        if not gold_words:
+            continue
+        pred_words = _words(resp)
+        scores.append(len(gold_words & pred_words) / len(gold_words))
+    return sum(scores) / len(scores) if scores else 0.0
+
+
 def _eval_synthetic(responses: List[str], targets: List[str]) -> float:
     scores = []
     for resp, tgt in zip(responses, targets):
@@ -321,6 +338,10 @@ DATASET_METRICS = {
     "infinite_bench_mc": ("infinite_mc",     "ExactMatch"),
     "json_kv":           ("synthetic_value", "SubEM(value)"),
     "ruler_mk_uuid":     ("synthetic_value", "SubEM(value)"),
+    "cwe":               ("word_recall",     "WordRecall"),
+    "fwe":               ("word_recall",     "WordRecall"),
+    "niah_single_1":     ("sub_exact_match", "SubEM"),
+    "vt":                ("sub_exact_match", "SubEM"),
 }
 
 
@@ -330,7 +351,7 @@ DATASET_METRICS = {
 
 def _dataset_key(path: Path) -> str:
     name = path.parent.name
-    for suffix in ("_128k", "_64k", "_32k", "_16k"):
+    for suffix in ("_256k_500", "_128k", "_64k", "_32k", "_16k"):
         if name.endswith(suffix):
             return name[: -len(suffix)]
     return name
@@ -367,6 +388,8 @@ def evaluate_file(path: Path) -> dict:
         score = _eval_infinite_mc(responses, raw_targets)
     elif metric == "synthetic_value":
         score = _eval_synthetic(responses, raw_targets)
+    elif metric == "word_recall":
+        score = _eval_word_recall(responses, raw_targets)
     else:
         raise ValueError(f"Unknown metric: {metric}")
 
